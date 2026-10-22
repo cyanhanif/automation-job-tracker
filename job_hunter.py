@@ -1,6 +1,6 @@
 import os
 import requests
-import google.generativeai as genai
+from google import genai
 from jobspy import scrape_jobs
 
 # ১. সিক্রেট কি লোড
@@ -11,30 +11,38 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 print("--- প্রসেস শুরু হচ্ছে ---")
 print(f"Checking Secrets: Bot Token={'OK' if TELEGRAM_BOT_TOKEN else 'MISSING'}, Chat ID={'OK' if TELEGRAM_CHAT_ID else 'MISSING'}")
 
-genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel("gemini-1.5-flash")
+# গুগলের নতুন অফিসিয়াল জেনারেটিভ এআই ক্লায়েন্ট
+client = genai.Client(api_key=GEMINI_API_KEY)
 
-TARGET_ROLES = "Automation Technician OR PLC Programmer OR Industrial Electrician"
+# সার্চ কিওয়ার্ড (নতুন পদসমূহ যুক্ত করা হয়েছে)
+TARGET_ROLES = (
+    "Automation Technician OR PLC Programmer OR Industrial Electrician OR "
+    "Electrician OR Technician OR AC Technician OR HVAC Technician OR Machine Operator"
+)
+
+# টার্গেট দেশের তালিকা
 LOCATIONS = [
     "Bangladesh",
     "United Arab Emirates",
     "Saudi Arabia",
     "Qatar",
-    "Poland"
+    "Poland",
+    "Czechia",
+    "Serbia"
 ]
 
 all_jobs = []
 
-# ২. জব স্ক্র্যাপিং ও লাইভ লগ
+# ২. জব সংগ্রহ (LinkedIn ও Indeed)
 for loc in LOCATIONS:
     print(f"\n🔍 Searching jobs for: {loc} ...")
     try:
         jobs = scrape_jobs(
-            site_name=["indeed", "linkedin", "glassdoor", "google"],
+            site_name=["indeed", "linkedin"],
             search_term=TARGET_ROLES,
             location=loc,
             results_wanted=3,
-            hours_old=72  # টেস্ট রানের জন্য ৭২ ঘণ্টা দেওয়া হয়েছে যাতে নিশ্চিত জব পাওয়া যায়
+            hours_old=72
         )
         if not jobs.empty:
             print(f" Found {len(jobs)} jobs in {loc}")
@@ -44,8 +52,22 @@ for loc in LOCATIONS:
     except Exception as e:
         print(f"⚠️ Error fetching for {loc}: {e}")
 
-# ৩. ভেরিফিকেশন ও মেসেজ ড্রাফট
+# ৩. এআই ভেরিফিকেশন ও মেসেজ ড্রাফট
 verified_jobs = []
+
+def generate_ai_review(prompt_text):
+    """মডেল ফলব্যাক হ্যান্ডেল করার ফাংশন"""
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash"]
+    for m in models_to_try:
+        try:
+            res = client.models.generate_content(
+                model=m,
+                contents=prompt_text
+            )
+            return res.text.strip()
+        except Exception:
+            continue
+    return None
 
 if all_jobs:
     print(f"\nTotal countries with jobs: {len(all_jobs)}. Starting AI evaluation...")
@@ -58,20 +80,28 @@ if all_jobs:
             job_url = str(row.get('job_url', ''))
 
             prompt = f"""
-            Analyze this job for an automation technician (Siemens, Delta, Mitsubishi, Omron, LS):
+            Analyze this job listing:
             Job Title: {title}
             Company: {company}
             Location: {location}
             Description: {description}
 
-            Check if it seems legitimate (not an upfront money scam).
-            If scam, reply ONLY 'REJECT'.
-            If legitimate, give 1 line validation reason and a 2-sentence cold message.
+            Candidate Skillset:
+            - Industrial wiring, electrical maintenance, control panels, AC/HVAC electrical controls.
+            - Hands-on PLC/VFD troubleshooting (Siemens, Delta, Mitsubishi, Omron, LS).
+            - Machine operation and maintenance.
+
+            Task:
+            1. Check if the listing is legitimate (reject if it requires upfront training/recruitment fees or looks like a scam).
+               If scam, reply ONLY: REJECT
+            2. If legitimate, provide:
+               - 1 short line: Validity/Legitimacy reason.
+               - 2 sentences: A concise cold application pitch highlighting matching electrical/automation skills.
             """
 
             try:
-                ai_eval = model.generate_content(prompt).text.strip()
-                if "REJECT" not in ai_eval:
+                ai_eval = generate_ai_review(prompt)
+                if ai_eval and "REJECT" not in ai_eval:
                     card = (
                         f"🏢 {title} at {company}\n"
                         f"📍 Location: {location}\n"
@@ -81,17 +111,19 @@ if all_jobs:
                     )
                     verified_jobs.append(card)
                     print(f" Verified Job: {title} ({company})")
+                elif not ai_eval:
+                    print(f"AI response failed for {title}")
             except Exception as e:
-                print(f"AI generation failed for {title}: {e}")
+                print(f"Generation error for {title}: {e}")
 
-            if len(verified_jobs) >= 5:
+            if len(verified_jobs) >= 8:
                 break
-        if len(verified_jobs) >= 5:
+        if len(verified_jobs) >= 8:
             break
 else:
     print("\n⚠️ No jobs were found across all locations.")
 
-# ৪. টেলিগ্রামে নোটিফিকেশন পাঠানো (নিরাপদ ফরম্যাট)
+# ৪. টেলিগ্রামে নোটিফিকেশন পাঠানো
 def notify_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -107,12 +139,12 @@ def notify_telegram(text):
     except Exception as err:
         print(f"Failed to connect to Telegram: {err}")
 
-# ৫. ফাইনাল সেন্ডিং
+# ৫. ফাইনাল মেসেজ ডেলিভারি
 if verified_jobs:
-    notify_telegram(f"⚡ আজকের ভেরিফাইড অটোমেশন জব ({len(verified_jobs)}টি পাওয়া গেছে):")
+    notify_telegram(f"⚡ আজকের ভেরিফাইড টেকনিক্যাল জব ({len(verified_jobs)}টি পাওয়া গেছে):")
     for msg in verified_jobs:
         notify_telegram(msg)
     print("\n✅ All messages dispatched to Telegram.")
 else:
-    notify_telegram("আজকের স্ক্যানে কোনো উপযুক্ত সার্কুলার পাওয়া যায়নি বা স্ক্র্যাপারে জব আসেনি।")
+    notify_telegram("আজকের স্ক্যানে কোনো উপযুক্ত সার্কুলার পাওয়া যায়নি।")
     print("\n Sent empty notification to Telegram.")
