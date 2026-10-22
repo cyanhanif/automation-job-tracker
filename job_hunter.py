@@ -14,24 +14,10 @@ print(f"Checking Secrets: Bot Token={'OK' if TELEGRAM_BOT_TOKEN else 'MISSING'},
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# ২. ফ্রি টিয়ারের ফ্ল্যাশ মডেলগুলোর তালিকা তৈরি
-available_flash_models = []
-try:
-    print("\n🔍 Scanning available Flash models in your account...")
-    for m in client.models.list():
-        # শুধু ফ্রি Flash মডেলগুলো বেছে নেওয়া হবে (Pro মডেল বাদ)
-        if "flash" in m.name.lower() and "pro" not in m.name.lower():
-            clean_name = m.name.replace("models/", "")
-            available_flash_models.append(clean_name)
-    print(f"Found Free Flash Models: {available_flash_models}")
-except Exception as e:
-    print(f"⚠️ Model list error: {e}")
+# গুগল প্রস্তাবিত মূল মডেল এবং ব্যাকআপ মডেল
+MODELS_TO_TRY = ["gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 
-# ডিফল্ট ফ্ল্যাশ মডেল ব্যাকআপ
-if not available_flash_models:
-    available_flash_models = ["gemini-2.0-flash", "gemini-1.5-flash"]
-
-# ৩. সার্চ কিওয়ার্ড ও দেশসমূহ
+# ২. সার্চ কিওয়ার্ড ও দেশসমূহ
 TARGET_ROLES = (
     "Automation Technician OR PLC Programmer OR Industrial Electrician OR "
     "Electrician OR Technician OR AC Technician OR HVAC Technician OR Machine Operator"
@@ -67,20 +53,18 @@ for loc in LOCATIONS:
     except Exception as e:
         print(f"⚠️ Error fetching for {loc}: {e}")
 
-# ৪. এআই ভেরিফিকেশন ও মেসেজ প্রস্তুতকরণ
+# ৩. এআই ভেরিফিকেশন ও মেসেজ প্রস্তুতকরণ
 verified_jobs = []
 
 def evaluate_with_ai(prompt_text):
-    for model_name in available_flash_models:
+    for model_name in MODELS_TO_TRY:
         try:
             res = client.models.generate_content(
                 model=model_name,
                 contents=prompt_text
             )
             return res.text.strip()
-        except Exception as err:
-            # এররটি টার্মিনালে প্রিন্ট হবে যাতে কারণ স্পষ্ট বোঝা যায়
-            print(f"⚠️ Model '{model_name}' failed: {err}")
+        except Exception:
             continue
     return None
 
@@ -114,8 +98,7 @@ if all_jobs:
                - 2 sentences: A concise cold application pitch highlighting matching electrical/automation skills.
             """
 
-            # ফ্রি টিয়ারের রেট লিমিট বজায় রাখতে ২ সেকেন্ড বিরতি
-            time.sleep(2)
+            time.sleep(1)
             ai_eval = evaluate_with_ai(prompt)
 
             if ai_eval and "REJECT" not in ai_eval:
@@ -137,7 +120,7 @@ if all_jobs:
                     f"----------------------------------------"
                 )
                 verified_jobs.append(card)
-                print(f" Added Job (Fallback): {title} ({company})")
+                print(f" Added Job: {title} ({company})")
 
             if len(verified_jobs) >= 8:
                 break
@@ -146,7 +129,7 @@ if all_jobs:
 else:
     print("\n⚠️ No jobs were found across all locations.")
 
-# ৫. টেলিগ্রামে মেসেজ পাঠানো
+# ৪. টেলিগ্রামে মেসেজ পাঠানো
 def notify_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -161,7 +144,7 @@ def notify_telegram(text):
     except Exception as err:
         print(f"Telegram Connection Error: {err}")
 
-# ৬. ফাইনাল ডেলিভারি
+# ৫. ফাইনাল ডেলিভারি
 if verified_jobs:
     notify_telegram(f"⚡ আজকের বাছাইকৃত টেকনিক্যাল জব ({len(verified_jobs)}টি পাওয়া গেছে):")
     for msg in verified_jobs:
