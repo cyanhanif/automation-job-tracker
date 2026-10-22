@@ -24,13 +24,18 @@ TARGET_ROLES = (
 )
 
 LOCATIONS = [
-    "Bangladesh",
-    "United Arab Emirates",
-    "Saudi Arabia",
-    "Qatar",
+    # বাংলাদেশ
     "Poland",
     "Czechia",
-    "Serbia"
+    "Serbia",
+    "Latvia",
+    "Bosnia and Herzegovina",
+    "Moldova",
+    "Bulgaria",
+    "United Arab Emirates",
+    "Saudi Arabia",
+    "Qatar"
+    "Bangladesh",
 ]
 
 all_jobs = []
