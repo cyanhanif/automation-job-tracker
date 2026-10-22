@@ -39,7 +39,7 @@ for loc in LOCATIONS:
     print(f"\n🔍 Searching jobs for: {loc} ...")
     try:
         jobs = scrape_jobs(
-            site_name=["indeed", "google", "linkedin"],
+            site_name=["indeed", "linkedin"],
             search_term=TARGET_ROLES,
             location=loc,
             results_wanted=3,
