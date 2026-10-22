@@ -1,0 +1,31 @@
+name: 8-Hour Automation Job Tracker
+
+on:
+  schedule:
+    # বাংলাদেশ সময়: সকাল ৬:০০, দুপুর ২:০০ এবং রাত ১০:০০ (UTC: 00:00, 08:00, 16:00)
+    - cron: '0 0,8,16 * * *'
+  workflow_dispatch: # যখনই চান ম্যানুয়ালি Run বাটনে ক্লিক করে টেস্ট করতে পারবেন
+
+jobs:
+  run-tracker:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install Libraries
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Execute Search & Verification
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python job_hunter.py
