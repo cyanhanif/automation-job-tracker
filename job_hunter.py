@@ -43,7 +43,7 @@ for loc in LOCATIONS:
             search_term=TARGET_ROLES,
             location=loc,
             results_wanted=3,
-            hours_old=72
+            hours_old=8
         )
         if not jobs.empty:
             print(f" Found {len(jobs)} jobs in {loc}")
