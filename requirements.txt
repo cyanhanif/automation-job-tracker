@@ -1,4 +1,4 @@
 python-jobspy
-google-generativeai
+google-genai
 requests
 pandas
