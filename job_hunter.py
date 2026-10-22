@@ -4,7 +4,7 @@ import requests
 from google import genai
 from jobspy import scrape_jobs
 
-# ১. ক্রেডেনশিয়াল লোড
+# ১. ক্রেডেনশিয়াল
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
@@ -13,42 +13,37 @@ print("--- প্রসেস শুরু হচ্ছে ---")
 print(f"Checking Secrets: Bot Token={'OK' if TELEGRAM_BOT_TOKEN else 'MISSING'}, Chat ID={'OK' if TELEGRAM_CHAT_ID else 'MISSING'}")
 
 client = genai.Client(api_key=GEMINI_API_KEY)
+
+# গুগল প্রস্তাবিত মূল মডেল এবং ব্যাকআপ মডেল
 MODELS_TO_TRY = ["gemini-3.8-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
 
-# ২. সার্চ কিওয়ার্ড
+# ২. সার্চ কিওয়ার্ড ও দেশসমূহ
 TARGET_ROLES = (
     "Automation Technician OR PLC Programmer OR Industrial Electrician OR "
     "Electrician OR Technician OR AC Technician OR HVAC Technician OR Machine Operator"
 )
 
-# দেশসমূহ এবং ইন্ডিড ম্যাপিং
-LOCATION_CONFIG = [
-    {"name": "Bangladesh", "indeed_country": "worldwide"},
-    {"name": "United Arab Emirates", "indeed_country": "emirates"},
-    {"name": "Saudi Arabia", "indeed_country": "saudiarabia"},
-    {"name": "Qatar", "indeed_country": "qatar"},
-    {"name": "Poland", "indeed_country": "poland"},
-    {"name": "Czechia", "indeed_country": "czechia"},
-    {"name": "Serbia", "indeed_country": "worldwide"}
+LOCATIONS = [
+    "Bangladesh",
+    "United Arab Emirates",
+    "Saudi Arabia",
+    "Qatar",
+    "Poland",
+    "Czechia",
+    "Serbia"
 ]
-
-# ৪টি সক্রিয় সাইট: LinkedIn, Indeed, ZipRecruiter এবং Google Jobs
-ACTIVE_SITES = ["indeed", "linkedin", "zip_recruiter", "google"]
 
 all_jobs = []
 
-for item in LOCATION_CONFIG:
-    loc = item["name"]
-    country_code = item["indeed_country"]
-    print(f"\n🔍 Searching [{', '.join(ACTIVE_SITES)}] for: {loc} ...")
+for loc in LOCATIONS:
+    print(f"\n🔍 Searching jobs for: {loc} ...")
     try:
         jobs = scrape_jobs(
-            site_name=ACTIVE_SITES,
+            site_name=["indeed", "google", "linkedin"],
             search_term=TARGET_ROLES,
             location=loc,
             results_wanted=3,
-            hours_old=72,
-            country_indeed=country_code
+            hours_old=72
         )
         if not jobs.empty:
             print(f" Found {len(jobs)} jobs in {loc}")
@@ -80,7 +75,6 @@ if all_jobs:
             title = str(row.get('title', 'N/A'))
             company = str(row.get('company', 'N/A'))
             location = str(row.get('location', 'N/A'))
-            site = str(row.get('site', 'JobBoard'))
             description = str(row.get('description', ''))[:2000]
             job_url = str(row.get('job_url', ''))
 
@@ -107,11 +101,9 @@ if all_jobs:
             time.sleep(1)
             ai_eval = evaluate_with_ai(prompt)
 
-            source_tag = f"[{site.upper()}]" if site else ""
-
             if ai_eval and "REJECT" not in ai_eval:
                 card = (
-                    f"🏢 {title} at {company} {source_tag}\n"
+                    f"🏢 {title} at {company}\n"
                     f"📍 Location: {location}\n"
                     f"🔗 Link: {job_url}\n\n"
                     f"📝 AI Review & Pitch:\n{ai_eval}\n"
@@ -121,7 +113,7 @@ if all_jobs:
                 print(f" Verified Job: {title} ({company})")
             else:
                 card = (
-                    f"🏢 {title} at {company} {source_tag}\n"
+                    f"🏢 {title} at {company}\n"
                     f"📍 Location: {location}\n"
                     f"🔗 Link: {job_url}\n\n"
                     f"⚠️ (Direct Apply Link)\n"
@@ -130,14 +122,14 @@ if all_jobs:
                 verified_jobs.append(card)
                 print(f" Added Job: {title} ({company})")
 
-            if len(verified_jobs) >= 10:
+            if len(verified_jobs) >= 8:
                 break
-        if len(verified_jobs) >= 10:
+        if len(verified_jobs) >= 8:
             break
 else:
     print("\n⚠️ No jobs were found across all locations.")
 
-# ৪. টেলিগ্রামে নোটিফিকেশন পাঠানো
+# ৪. টেলিগ্রামে মেসেজ পাঠানো
 def notify_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
