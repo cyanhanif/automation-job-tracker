@@ -1,4 +1,5 @@
 import os
+import time
 import requests
 from google import genai
 from jobspy import scrape_jobs
@@ -13,39 +14,11 @@ print(f"Checking Secrets: Bot Token={'OK' if TELEGRAM_BOT_TOKEN else 'MISSING'},
 
 client = genai.Client(api_key=GEMINI_API_KEY)
 
-# ২. আপনার একাউন্টের একটিভ জেমিনি মডেল স্বয়ংক্রিয়ভাবে সিলেক্ট করা
-active_model = None
-try:
-    print("\n🔍 Checking available Gemini models for your API key...")
-    available_models = [m.name for m in client.models.list()]
-    print(f"Found {len(available_models)} models in your account.")
-    
-    # অগ্রাধিকার তালিকা
-    priority_models = [
-        "gemini-2.0-flash",
-        "gemini-1.5-flash",
-        "gemini-1.5-flash-latest",
-        "gemini-1.5-pro",
-        "gemini-pro"
-    ]
-    
-    for p in priority_models:
-        for avail in available_models:
-            if p in avail:
-                active_model = avail
-                break
-        if active_model:
-            break
-            
-    if not active_model and available_models:
-        active_model = available_models[0]
-        
-    print(f"✅ Selected active model: {active_model}")
-except Exception as e:
-    print(f"⚠️ Model discovery error: {e}")
-    active_model = "gemini-2.0-flash"
+# ফ্রি টিয়ারের জন্য সরাসরি Flash মডেল নির্ধারণ
+ACTIVE_MODEL = "gemini-2.5-flash"
+print(f"Using Free Tier Model: {ACTIVE_MODEL}")
 
-# ৩. সার্চ কিওয়ার্ড ও দেশসমূহ
+# ২. সার্চ কিওয়ার্ড ও দেশসমূহ
 TARGET_ROLES = (
     "Automation Technician OR PLC Programmer OR Industrial Electrician OR "
     "Electrician OR Technician OR AC Technician OR HVAC Technician OR Machine Operator"
@@ -81,19 +54,21 @@ for loc in LOCATIONS:
     except Exception as e:
         print(f"⚠️ Error fetching for {loc}: {e}")
 
-# ৪. এআই ভেরিফিকেশন ও মেসেজ প্রস্তুতকরণ
+# ৩. এআই ভেরিফিকেশন ও মেসেজ প্রস্তুতকরণ
 verified_jobs = []
 
 def evaluate_with_ai(prompt_text):
-    try:
-        res = client.models.generate_content(
-            model=active_model,
-            contents=prompt_text
-        )
-        return res.text.strip()
-    except Exception as err:
-        print(f"AI API Call Error: {err}")
-        return None
+    models = ["gemini-2.5-flash", "gemini-2.0-flash"]
+    for m in models:
+        try:
+            res = client.models.generate_content(
+                model=m,
+                contents=prompt_text
+            )
+            return res.text.strip()
+        except Exception as err:
+            continue
+    return None
 
 if all_jobs:
     print(f"\nTotal countries with jobs: {len(all_jobs)}. Starting processing...")
@@ -121,13 +96,14 @@ if all_jobs:
             1. Check if the listing is legitimate (reject if it requires upfront training/recruitment fees or looks like an obvious scam).
                If scam, reply ONLY: REJECT
             2. If legitimate, provide:
-               - 1 short line: Validity/Legitimacy reason.
+               - 1 short line: Validity reason.
                - 2 sentences: A concise cold application pitch highlighting matching electrical/automation skills.
             """
 
+            # রেট লিমিট এড়াতে ১.৫ সেকেন্ড বিরতি
+            time.sleep(1.5)
             ai_eval = evaluate_with_ai(prompt)
 
-            # স্ক্যাম হিসেবে চিহ্নিত না হলে অ্যাড করা হবে
             if ai_eval and "REJECT" not in ai_eval:
                 card = (
                     f"🏢 {title} at {company}\n"
@@ -139,12 +115,11 @@ if all_jobs:
                 verified_jobs.append(card)
                 print(f" Verified Job: {title} ({company})")
             elif ai_eval is None:
-                # এআই ফেইল করলেও জব ড্রপ হবে না, লিঙ্কসহ যাবে
                 card = (
                     f"🏢 {title} at {company}\n"
                     f"📍 Location: {location}\n"
                     f"🔗 Link: {job_url}\n\n"
-                    f"⚠️ (সরাসরি আবেদন লিঙ্ক)\n"
+                    f"⚠️ (Direct Apply Link)\n"
                     f"----------------------------------------"
                 )
                 verified_jobs.append(card)
@@ -157,7 +132,7 @@ if all_jobs:
 else:
     print("\n⚠️ No jobs were found across all locations.")
 
-# ৫. টেলিগ্রামে মেসেজ পাঠানো
+# ৪. টেলিগ্রামে মেসেজ পাঠানো
 def notify_telegram(text):
     url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
     payload = {
@@ -172,7 +147,7 @@ def notify_telegram(text):
     except Exception as err:
         print(f"Telegram Connection Error: {err}")
 
-# ৬. ফলাফল ডেলিভারি
+# ৫. ফাইনাল ডেলিভারি
 if verified_jobs:
     notify_telegram(f"⚡ আজকের বাছাইকৃত টেকনিক্যাল জব ({len(verified_jobs)}টি পাওয়া গেছে):")
     for msg in verified_jobs:
