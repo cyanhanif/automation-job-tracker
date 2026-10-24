@@ -25,12 +25,13 @@ TARGET_ROLES = (
 
 LOCATIONS = [
     # বাংলাদেশ
-    "Poland",
-    "Czechia",
+    
     "Serbia",
     "Latvia",
     "Bosnia and Herzegovina",
     "Moldova",
+    "Czechia",
+    "Poland",
     "Bulgaria",
     "United Arab Emirates",
     "Saudi Arabia",
